@@ -1,0 +1,21 @@
+{
+    "name": "pit-stop",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "license": "MIT",
+    "private": true,
+    "scripts": {
+        "lint": "./node_modules/.bin/eslint src/**/* || npm run --silent lint:fix",
+        "lint:fix": "./node_modules/.bin/eslint src/**/* --fix",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@forge/api": "latest",
+        "@forge/ui": "latest",
+        "@forge/resolver": "latest"
+    },
+    "devDependencies": {
+        "eslint": "^8.0.0",
+        "eslint-plugin-react-hooks": "^4.0.0"
+    }
+}
