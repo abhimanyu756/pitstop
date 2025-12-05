@@ -1,32 +1,21 @@
 modules:
-  trigger:
-    - key: comment-trigger
-      function: comment-handler
-      events:
-        - avi:jira:comment:created
-    - key: stall-check-trigger
-      function: stall-checker
-      events:
-        - avi:jira:updated:issue
-  webtrigger:
-    - key: debug-trigger
-      function: comment-handler
+  jira:issuePanel:
+    - key: hello-world-app-hello-world-issue-panel
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: hello-world-app
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
   function:
-    - key: main
-      handler: index.run
-    - key: agent-resolver
-      handler: index.agentResolver
-    - key: comment-handler
-      handler: index.handleComment
-    - key: stall-checker
-      handler: index.checkStall
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.jsx
 app:
-  id: ari:cloud:ecosystem::app/af96b1ef-efea-4eb7-b1f2-6fa71d8b810e
   runtime:
     name: nodejs22.x
-permissions:
-  scopes:
-    - read:jira-work
-    - write:jira-work
-    - read:comment:jira
-    - write:comment:jira
+    memoryMB: 256
+    architecture: arm64
+  id: "af96b1ef-efea-4eb7-b1f2-6fa71d8b810e"

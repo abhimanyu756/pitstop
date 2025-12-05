@@ -1,79 +1,104 @@
-import api, { route } from '@forge/api';
-import { isStalled } from './telemetry';
+import api, { route } from "@forge/api";
 
-export const run = async (req) => {
-    console.log("Pit Stop App Running");
-};
+let appAccountId = null;
 
-export const handleComment = async (event) => {
-    const { issue, comment } = event;
+export async function handleComment(event, context) {
+  console.log("=== COMMENT HANDLER TRIGGERED ===");
+  console.log("Event:", JSON.stringify(event, null, 2));
 
-    console.log("DEBUG: Event received!");
-    console.log(`User: ${comment.author.displayName} wrote a comment.`);
+  try {
+    // For Jira comment triggers, the event structure is different
+    // The event object contains the comment data directly
+    const comment = event.comment;
+    const issue = event.issue;
 
-    // Prevent infinite loops: Don't reply to the app's own comments
-    // (In a real app, check accountId. For now, assume if it says "Hello World" it's us)
-    const text = extractTextFromComment(comment.body);
-    if (text.includes("Hello World")) return;
-
-    await addComment(issue.id, "Hello World 🌍 (I am alive!)");
-};
-
-export const checkStall = async (event) => {
-    // Passive monitoring (Scheduled or Event-based)
-    const issueId = event.issue.id;
-    const issue = await getIssueDetails(issueId);
-
-    const stallData = await isStalled(issue);
-
-    if (stallData.isStalled) {
-        console.log(`Issue ${issue.key} is stalled: ${stallData.reason}`);
-        // Optional: Auto-comment on severe stalls even without !pitstop trigger
+    if (!comment || !issue) {
+      console.error("Missing comment or issue in event");
+      console.error("Event keys:", Object.keys(event));
+      return;
     }
-};
 
-// --- Helpers ---
+    const issueId = issue.id;
+    const issueKey = issue.key;
+    const authorId = comment.author?.accountId;
 
-async function getIssueDetails(issueId) {
-    const response = await api.asApp().requestJira(route`/rest/api/3/issue/${issueId}?expand=changelog`);
-    return await response.json();
+    console.log(`Comment added to ${issueKey} (${issueId}) by ${authorId}`);
+
+    // Get app's account ID to prevent infinite loop
+    if (!appAccountId) {
+      appAccountId = await getAppAccountId();
+      console.log("App account ID:", appAccountId);
+    }
+
+    // Don't reply to our own comments
+    if (authorId === appAccountId) {
+      console.log("Skipping - this is our own comment");
+      return;
+    }
+
+    // Add the reply
+    console.log("Adding reply comment...");
+    await addComment(issueId, "Hello World 🌍 (I am alive!)");
+    console.log("✅ Reply added successfully!");
+  } catch (error) {
+    console.error("❌ ERROR:", error.message);
+    console.error("Stack:", error.stack);
+  }
 }
 
-async function addComment(issueId, body) {
-    // Jira Cloud ADF format
-    const requestBody = {
-        body: {
-            type: "doc",
-            version: 1,
-            content: [
-                {
-                    type: "paragraph",
-                    content: [
-                        {
-                            type: "text",
-                            text: body
-                        }
-                    ]
-                }
-            ]
-        }
-    };
+// --- Helper Functions ---
 
-    await api.asApp().requestJira(route`/rest/api/3/issue/${issueId}/comment`, {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+async function getAppAccountId() {
+  try {
+    const response = await api.asApp().requestJira(route`/rest/api/3/myself`);
+
+    if (!response.ok) {
+      console.error("Failed to get app account");
+      return null;
+    }
+
+    const data = await response.json();
+    return data.accountId;
+  } catch (error) {
+    console.error("Error getting app account:", error.message);
+    return null;
+  }
+}
+
+async function addComment(issueId, text) {
+  const commentBody = {
+    body: {
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: text,
+            },
+          ],
         },
-        body: JSON.stringify(requestBody)
-    });
-}
+      ],
+    },
+  };
 
-function extractTextFromComment(body) {
-    // Simple helper to get text from ADF
-    try {
-        return body.content.map(p => p.content.map(t => t.text).join(' ')).join(' ');
-    } catch (e) {
-        return "";
-    }
+  const response = await api
+    .asApp()
+    .requestJira(route`/rest/api/3/issue/${issueId}/comment`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(commentBody),
+    });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to add comment: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
 }
