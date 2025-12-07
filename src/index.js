@@ -1,20 +1,72 @@
 import api, { route } from "@forge/api";
+import { isStalled, formatStallMessage } from "./telemetry.js";
 
 let appAccountId = null;
+
+// 🧪 TEST FUNCTION: Call this with any issue key to test stall detection
+export async function testStallDetection(issueKey) {
+  console.log(`=== TESTING STALL DETECTION FOR ${issueKey} ===`);
+
+  try {
+    // Search for the issue by key
+    const searchResponse = await api
+      .asApp()
+      .requestJira(route`/rest/api/3/search?jql=key=${issueKey}`);
+
+    const searchData = await searchResponse.json();
+
+    if (!searchData.issues || searchData.issues.length === 0) {
+      console.error(`Issue ${issueKey} not found`);
+      return;
+    }
+
+    const issue = searchData.issues[0];
+    const issueId = issue.id;
+
+    // Fetch full details
+    const fullIssue = await getIssueDetails(issueId);
+
+    if (!fullIssue) {
+      console.error("Failed to fetch issue details");
+      return;
+    }
+
+    // Run stall detection
+    console.log("Running stall detection...");
+    const stallInfo = await isStalled(fullIssue);
+
+    console.log("=== STALL DETECTION RESULT ===");
+    console.log(JSON.stringify(stallInfo, null, 2));
+
+    // Post comment if stalled
+    if (stallInfo.isStalled) {
+      const message = formatStallMessage(stallInfo, issueKey);
+      await addComment(issueId, message);
+      console.log("✅ Test comment posted!");
+    } else {
+      console.log("✅ Issue is healthy!");
+    }
+
+    return stallInfo;
+  } catch (error) {
+    console.error("Test error:", error.message);
+    console.error(error.stack);
+  }
+}
+
+// Export scanner function for scheduled trigger
+export { scanForStalledIssues } from "./scanner.js";
 
 export async function handleComment(event, context) {
   console.log("=== COMMENT HANDLER TRIGGERED ===");
   console.log("Event:", JSON.stringify(event, null, 2));
 
   try {
-    // For Jira comment triggers, the event structure is different
-    // The event object contains the comment data directly
     const comment = event.comment;
     const issue = event.issue;
 
     if (!comment || !issue) {
       console.error("Missing comment or issue in event");
-      console.error("Event keys:", Object.keys(event));
       return;
     }
 
@@ -36,10 +88,35 @@ export async function handleComment(event, context) {
       return;
     }
 
-    // Add the reply
-    console.log("Adding reply comment...");
-    await addComment(issueId, "Hello World 🌍 (I am alive!)");
-    console.log("✅ Reply added successfully!");
+    // Fetch full issue details for stall detection
+    console.log("Fetching full issue details...");
+    const fullIssue = await getIssueDetails(issueId);
+
+    if (!fullIssue) {
+      console.error("Failed to fetch issue details");
+      return;
+    }
+
+    // Run stall detection
+    console.log("Running stall detection...");
+    const stallInfo = await isStalled(fullIssue);
+
+    console.log("Stall detection result:", JSON.stringify(stallInfo, null, 2));
+
+    // If stalled, post a helpful comment
+    if (stallInfo.isStalled) {
+      const message = formatStallMessage(stallInfo, issueKey);
+
+      if (message) {
+        console.log("Issue is stalled - adding warning comment");
+        await addComment(issueId, message);
+        console.log("✅ Stall warning posted!");
+      }
+    } else {
+      console.log("✅ Issue is healthy - no action needed");
+      // Optionally post an encouraging message
+      // await addComment(issueId, "👍 Keep up the good work!");
+    }
   } catch (error) {
     console.error("❌ ERROR:", error.message);
     console.error("Stack:", error.stack);
@@ -61,6 +138,27 @@ async function getAppAccountId() {
     return data.accountId;
   } catch (error) {
     console.error("Error getting app account:", error.message);
+    return null;
+  }
+}
+
+async function getIssueDetails(issueId) {
+  try {
+    const response = await api
+      .asApp()
+      .requestJira(
+        route`/rest/api/3/issue/${issueId}?fields=status,assignee,created,updated,comment,issuelinks,summary,description,priority`
+      );
+
+    if (!response.ok) {
+      console.error("Failed to fetch issue details");
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching issue:", error.message);
     return null;
   }
 }

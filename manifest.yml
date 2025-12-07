@@ -3,14 +3,23 @@ modules:
     - key: comment-created-trigger
       function: comment-handler
       events:
-        - avi:jira:created:comment
+        - avi:jira:commented:issue
+  scheduledTrigger:
+    - key: scheduled-stall-scanner
+      function: stall-scanner
+      interval: fiveMinute
   function:
     - key: comment-handler
       handler: index.handleComment
+    - key: stall-scanner
+      handler: scanner.scanForStalledIssues
+      timeoutSeconds: 300
+
 app:
   id: ari:cloud:ecosystem::app/af96b1ef-efea-4eb7-b1f2-6fa71d8b810e
   runtime:
     name: nodejs22.x
+
 permissions:
   scopes:
     - read:jira-work
@@ -18,3 +27,7 @@ permissions:
     - read:comment:jira
     - write:comment:jira
     - read:jira-user
+  external:
+    fetch:
+      backend:
+        - "*.atlassian.com"
