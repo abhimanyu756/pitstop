@@ -1,69 +1,91 @@
+/**
+ * Enhanced Telemetry with Phase 2 Intelligence
+ * Integrates changelog analysis and contextual suggestions
+ */
+
 import api, { route } from "@forge/api";
-
-// Configurable thresholds (hours)
-const STALL_THRESHOLDS = {
-  "In Progress": 48, // 2 days
-  "In Review": 24, // 1 day
-  "Code Review": 24, // 1 day
-  "To Do": 168, // 1 week
-  Backlog: 336, // 2 weeks
-  Blocked: 12, // 12 hours (should be resolved quickly)
-  default: 72, // 3 days for any other status
-};
-
-// Time without human comment threshold
-const NO_HUMAN_COMMENT_THRESHOLD = 96; // 4 days
+import { getThresholdForStatus, getSettings } from "./configManager.js";
+import {
+  analyzeChangelog,
+  getRealLastActivity,
+  formatChangelogInsights,
+} from "./changelogAnalyzer.js";
+import {
+  generateContextualSuggestions,
+  formatSuggestions,
+} from "./contextAdvisor.js";
 
 /**
  * Main function to check if an issue is stalled
- * Returns detailed stall information
+ * NOW WITH PHASE 2 INTELLIGENCE! 🧠
  */
 export const isStalled = async (issue) => {
   const stallReasons = [];
   const now = new Date();
+  const settings = await getSettings();
 
   // Extract basic issue info
   const status = issue.fields.status.name;
-  const updated = new Date(issue.fields.updated);
-  const created = new Date(issue.fields.created);
   const assignee = issue.fields.assignee;
-  const timeSinceUpdate = (now - updated) / (1000 * 60 * 60); // hours
+  const created = new Date(issue.fields.created);
+  const updated = new Date(issue.fields.updated);
   const issueAge = (now - created) / (1000 * 60 * 60 * 24); // days
 
-  // Check 1: Time since last update
-  const threshold = STALL_THRESHOLDS[status] || STALL_THRESHOLDS["default"];
-  if (timeSinceUpdate > threshold) {
-    stallReasons.push({
-      type: "NO_ACTIVITY",
-      severity: "HIGH",
-      message: `No activity in '${status}' for ${Math.floor(
-        timeSinceUpdate
-      )} hours (threshold: ${threshold}h)`,
-      hours: Math.floor(timeSinceUpdate),
-    });
+  console.log(`🔍 Analyzing ${issue.key} - Status: ${status}`);
+
+  // 🆕 PHASE 2: Changelog Analysis
+  let changelogAnalysis = null;
+  if (settings.features.useChangelogAnalysis) {
+    console.log("📊 Running changelog analysis...");
+    changelogAnalysis = await analyzeChangelog(issue.id);
+  }
+
+  // 🆕 Use "real" last activity (ignoring bot noise)
+  const lastActivity = changelogAnalysis
+    ? getRealLastActivity(issue, changelogAnalysis)
+    : updated;
+
+  const timeSinceUpdate = (now - lastActivity) / (1000 * 60 * 60); // hours
+
+  console.log(
+    `Last meaningful activity: ${Math.floor(timeSinceUpdate)} hours ago`
+  );
+
+  // Check 1: Time since last update (using configurable threshold)
+  if (settings.features.detectNoActivity) {
+    const threshold = await getThresholdForStatus(status);
+    if (timeSinceUpdate > threshold) {
+      stallReasons.push({
+        type: "NO_ACTIVITY",
+        severity: timeSinceUpdate > threshold * 2 ? "HIGH" : "MEDIUM",
+        message: `No activity in '${status}' for ${Math.floor(
+          timeSinceUpdate
+        )} hours (threshold: ${threshold}h)`,
+        hours: Math.floor(timeSinceUpdate),
+        threshold,
+      });
+    }
   }
 
   // Check 2: Time since last human comment
-  try {
-    const lastHumanComment = await getLastHumanComment(issue.id);
-    if (lastHumanComment) {
-      const timeSinceComment =
-        (now - new Date(lastHumanComment.created)) / (1000 * 60 * 60);
-      if (timeSinceComment > NO_HUMAN_COMMENT_THRESHOLD) {
-        stallReasons.push({
-          type: "NO_HUMAN_INTERACTION",
-          severity: "MEDIUM",
-          message: `No human comments for ${Math.floor(
-            timeSinceComment
-          )} hours (last by ${lastHumanComment.author})`,
-          hours: Math.floor(timeSinceComment),
-          lastAuthor: lastHumanComment.author,
-        });
-      }
-    } else {
-      // No comments at all
-      if (issueAge > 2) {
-        // More than 2 days old with no comments
+  if (settings.features.detectNoHumanComments) {
+    try {
+      const lastHumanComment = await getLastHumanComment(issue.id);
+      if (lastHumanComment) {
+        const timeSinceComment =
+          (now - new Date(lastHumanComment.created)) / (1000 * 60 * 60);
+        if (timeSinceComment > settings.noHumanCommentThreshold) {
+          stallReasons.push({
+            type: "NO_HUMAN_INTERACTION",
+            severity: "MEDIUM",
+            message: `No human comments for ${Math.floor(
+              timeSinceComment
+            )} hours (last by ${lastHumanComment.author})`,
+            hours: Math.floor(timeSinceComment),
+            lastAuthor: lastHumanComment.author,
+          });
+        }
+      } else if (issueAge > 2) {
         stallReasons.push({
           type: "NO_COMMENTS",
           severity: "MEDIUM",
@@ -71,15 +93,15 @@ export const isStalled = async (issue) => {
           days: Math.floor(issueAge),
         });
       }
+    } catch (error) {
+      console.error("Error checking comments:", error.message);
     }
-  } catch (error) {
-    console.error("Error checking comments:", error.message);
   }
 
   // Check 3: Assigned but not progressing
   if (assignee && status === "In Progress") {
-    // If it's been "In Progress" for a long time, it might be stuck
-    if (timeSinceUpdate > STALL_THRESHOLDS["In Progress"]) {
+    const threshold = await getThresholdForStatus("In Progress");
+    if (timeSinceUpdate > threshold) {
       stallReasons.push({
         type: "ASSIGNED_NOT_PROGRESSING",
         severity: "HIGH",
@@ -93,31 +115,35 @@ export const isStalled = async (issue) => {
   }
 
   // Check 4: Unassigned in active status
-  if (!assignee && (status === "In Progress" || status === "In Review")) {
-    stallReasons.push({
-      type: "UNASSIGNED_ACTIVE",
-      severity: "HIGH",
-      message: `Issue is '${status}' but has no assignee`,
-      status: status,
-    });
+  if (settings.features.detectUnassigned) {
+    if (!assignee && (status === "In Progress" || status === "In Review")) {
+      stallReasons.push({
+        type: "UNASSIGNED_ACTIVE",
+        severity: "HIGH",
+        message: `Issue is '${status}' but has no assignee`,
+        status: status,
+      });
+    }
   }
 
   // Check 5: Blocked or has blockers
-  try {
-    const hasBlockers = await checkForBlockers(issue.id);
-    if (hasBlockers.isBlocked) {
-      stallReasons.push({
-        type: "HAS_BLOCKERS",
-        severity: "CRITICAL",
-        message: `Blocked by ${
-          hasBlockers.count
-        } issue(s): ${hasBlockers.blockers.join(", ")}`,
-        blockers: hasBlockers.blockers,
-        count: hasBlockers.count,
-      });
+  if (settings.features.detectBlockers) {
+    try {
+      const hasBlockers = await checkForBlockers(issue.id);
+      if (hasBlockers.isBlocked) {
+        stallReasons.push({
+          type: "HAS_BLOCKERS",
+          severity: "CRITICAL",
+          message: `Blocked by ${
+            hasBlockers.count
+          } issue(s): ${hasBlockers.blockers.join(", ")}`,
+          blockers: hasBlockers.blockers,
+          count: hasBlockers.count,
+        });
+      }
+    } catch (error) {
+      console.error("Error checking blockers:", error.message);
     }
-  } catch (error) {
-    console.error("Error checking blockers:", error.message);
   }
 
   // Check 6: Status is explicitly "Blocked"
@@ -132,17 +158,58 @@ export const isStalled = async (issue) => {
     });
   }
 
+  // 🆕 PHASE 2: Add changelog pattern detections
+  if (changelogAnalysis?.patterns && changelogAnalysis.patterns.length > 0) {
+    changelogAnalysis.patterns.forEach((pattern) => {
+      stallReasons.push({
+        type: pattern.type,
+        severity: pattern.severity,
+        message: pattern.message,
+        pattern: true,
+        details: pattern,
+      });
+    });
+  }
+
   // Compile results
   const isStalled = stallReasons.length > 0;
   const highestSeverity = getHighestSeverity(stallReasons);
 
-  return {
+  const result = {
     isStalled,
     severity: highestSeverity,
     reasons: stallReasons,
     summary: generateSummary(stallReasons),
-    actionableInsights: generateActionableInsights(stallReasons, issue),
+    actionableInsights: [], // Will be populated below
+    changelogAnalysis,
+    contextualSuggestions: [],
   };
+
+  // 🆕 PHASE 2: Generate contextual suggestions
+  if (isStalled && settings.features.useContextualSuggestions) {
+    console.log("💡 Generating contextual suggestions...");
+    try {
+      const suggestions = await generateContextualSuggestions(
+        issue,
+        result,
+        changelogAnalysis
+      );
+      result.contextualSuggestions = suggestions;
+    } catch (error) {
+      console.error("Error generating suggestions:", error.message);
+    }
+  }
+
+  // Legacy actionable insights (kept for backward compatibility)
+  result.actionableInsights = generateActionableInsights(stallReasons, issue);
+
+  console.log(
+    `✅ Analysis complete: ${
+      isStalled ? "STALLED" : "HEALTHY"
+    } (${highestSeverity})`
+  );
+
+  return result;
 };
 
 /**
@@ -164,7 +231,6 @@ async function getLastHumanComment(issueId) {
     const data = await response.json();
     const comments = data.comments || [];
 
-    // Filter out bot comments (bots usually have accountType: 'app' or 'atlassian')
     const humanComments = comments.filter((comment) => {
       const author = comment.author;
       return author && author.accountType === "atlassian" && author.active;
@@ -203,11 +269,9 @@ async function checkForBlockers(issueId) {
     const blockers = [];
 
     issueLinks.forEach((link) => {
-      // Check if this issue is blocked by another
       if (link.type.name === "Blocks" && link.inwardIssue) {
         blockers.push(link.inwardIssue.key);
       }
-      // Or if there's a "is blocked by" relationship
       if (link.type.inward === "is blocked by" && link.outwardIssue) {
         blockers.push(link.outwardIssue.key);
       }
@@ -250,16 +314,20 @@ function generateSummary(reasons) {
   const highCount = reasons.filter((r) => r.severity === "HIGH").length;
 
   if (criticalCount > 0) {
-    return `🚨 Critical: ${reasons[0].message}`;
+    return `🚨 Critical: ${
+      reasons.find((r) => r.severity === "CRITICAL").message
+    }`;
   } else if (highCount > 0) {
-    return `⚠️ High Priority: ${reasons[0].message}`;
+    return `⚠️ High Priority: ${
+      reasons.find((r) => r.severity === "HIGH").message
+    }`;
   } else {
     return `⏰ Attention Needed: ${reasons[0].message}`;
   }
 }
 
 /**
- * Generate actionable insights based on stall reasons
+ * Generate actionable insights (legacy - kept for compatibility)
  */
 function generateActionableInsights(reasons, issue) {
   const insights = [];
@@ -302,12 +370,12 @@ function generateActionableInsights(reasons, issue) {
     }
   });
 
-  // Remove duplicates
   return [...new Set(insights)];
 }
 
 /**
  * Format stall information for display in a comment
+ * 🆕 NOW WITH PHASE 2 ENHANCEMENTS!
  */
 export function formatStallMessage(stallInfo, issueKey) {
   if (!stallInfo.isStalled) {
@@ -317,9 +385,10 @@ export function formatStallMessage(stallInfo, issueKey) {
   let message = `🏎️ **Pit Stop Alert** - ${issueKey}\n\n`;
   message += `${stallInfo.summary}\n\n`;
 
+  // Add main stall reasons
   if (stallInfo.reasons.length > 1) {
     message += `**Issues Detected:**\n`;
-    stallInfo.reasons.forEach((reason, index) => {
+    stallInfo.reasons.forEach((reason) => {
       const emoji =
         reason.severity === "CRITICAL"
           ? "🚨"
@@ -331,7 +400,22 @@ export function formatStallMessage(stallInfo, issueKey) {
     message += "\n";
   }
 
-  if (stallInfo.actionableInsights.length > 0) {
+  // 🆕 Add changelog insights if available
+  if (stallInfo.changelogAnalysis) {
+    const insights = formatChangelogInsights(stallInfo.changelogAnalysis);
+    if (insights) {
+      message += insights + "\n";
+    }
+  }
+
+  // 🆕 Use contextual suggestions if available (Phase 2)
+  if (
+    stallInfo.contextualSuggestions &&
+    stallInfo.contextualSuggestions.length > 0
+  ) {
+    message += formatSuggestions(stallInfo.contextualSuggestions);
+  } else if (stallInfo.actionableInsights.length > 0) {
+    // Fall back to legacy insights
     message += `**Suggested Actions:**\n`;
     stallInfo.actionableInsights.forEach((insight) => {
       message += `${insight}\n`;

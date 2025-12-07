@@ -60,4 +60,27 @@ export const FEATURES = {
   detectBlockers: true,
   detectAssignedNotProgressing: true,
   postComments: true, // Set to false to run in "dry run" mode
+
+  // 🎯 NEW: Smart Comment Response Features
+  postStallWarnings: true, // Post warnings when users comment on stalled issues
+  postEncouragement: true, // Post encouraging messages on healthy issues (set to true to enable)
+  encouragementChance: 0.3, // 30% chance to post encouragement (prevents spam)
+};
+
+// 🎯 Smart Response Settings
+export const SMART_RESPONSE_CONFIG = {
+  // When to respond to comments
+  respondToStalled: true, // Always respond if issue is stalled
+  respondToHealthy: false, // Only respond to healthy issues sometimes
+
+  // Encouragement settings
+  encourageAssignees: true, // Encourage when assignee comments
+  encourageRecentActivity: true, // Encourage recent activity (< 2 hours)
+
+  // Message tone
+  useFriendlyTone: true, // Use emojis and casual language
+  includeActionables: true, // Include actionable suggestions
+
+  // Cooldown between responses (hours)
+  cooldownHours: COMMENT_COOLDOWN_HOURS,
 };

@@ -1,19 +1,33 @@
 modules:
+  # Admin configuration panel (NEW!)
+  admin:
+    - key: pit-stop-admin
+      function: admin-ui
+      title: Pit Stop Configuration
+
+  # Existing triggers
   trigger:
     - key: comment-created-trigger
       function: comment-handler
       events:
         - avi:jira:commented:issue
+
   scheduledTrigger:
     - key: scheduled-stall-scanner
       function: stall-scanner
       interval: fiveMinute
+
+  # Functions
   function:
     - key: comment-handler
       handler: index.handleComment
+
     - key: stall-scanner
       handler: scanner.scanForStalledIssues
       timeoutSeconds: 300
+
+    - key: admin-ui
+      handler: adminUI.run
 
 app:
   id: ari:cloud:ecosystem::app/af96b1ef-efea-4eb7-b1f2-6fa71d8b810e
@@ -27,6 +41,7 @@ permissions:
     - read:comment:jira
     - write:comment:jira
     - read:jira-user
+    - storage:app # NEW: Required for Forge Storage
   external:
     fetch:
       backend:
