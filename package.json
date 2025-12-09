@@ -11,10 +11,11 @@
     },
     "dependencies": {
         "@forge/api": "latest",
-        "@forge/ui": "latest",
-        "@forge/resolver": "latest"
+        "@forge/resolver": "latest",
+        "@forge/ui": "^1.11.4"
     },
     "devDependencies": {
+        "@babel/preset-react": "^7.28.5",
         "eslint": "^8.0.0",
         "eslint-plugin-react-hooks": "^4.0.0"
     }

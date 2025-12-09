@@ -1,6 +1,6 @@
 modules:
-  # Admin configuration panel (NEW!)
-  admin:
+  # Admin configuration panel
+  jira:adminPage:
     - key: pit-stop-admin
       function: admin-ui
       title: Pit Stop Configuration
@@ -41,8 +41,8 @@ permissions:
     - read:comment:jira
     - write:comment:jira
     - read:jira-user
-    - storage:app # NEW: Required for Forge Storage
+    - storage:app
   external:
     fetch:
       backend:
-        - "*.atlassian.com"
+        - address: "*.atlassian.com"
