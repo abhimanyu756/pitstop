@@ -1,22 +1,23 @@
 {
-    "name": "pit-stop",
-    "version": "1.0.0",
-    "main": "src/index.js",
-    "license": "MIT",
-    "private": true,
-    "scripts": {
-        "lint": "./node_modules/.bin/eslint src/**/* || npm run --silent lint:fix",
-        "lint:fix": "./node_modules/.bin/eslint src/**/* --fix",
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "dependencies": {
-        "@forge/api": "latest",
-        "@forge/resolver": "latest",
-        "@forge/ui": "^1.11.4"
-    },
-    "devDependencies": {
-        "@babel/preset-react": "^7.28.5",
-        "eslint": "^8.0.0",
-        "eslint-plugin-react-hooks": "^4.0.0"
-    }
+  "name": "pit-stop",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "lint": "./node_modules/.bin/eslint src/**/* || npm run --silent lint:fix",
+    "lint:fix": "./node_modules/.bin/eslint src/**/* --fix",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@forge/api": "latest",
+    "@forge/resolver": "latest",
+    "@forge/react": "latest",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@babel/preset-react": "^7.28.5",
+    "eslint": "^8.0.0",
+    "eslint-plugin-react-hooks": "^4.0.0"
+  }
 }

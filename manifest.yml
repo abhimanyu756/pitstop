@@ -1,8 +1,10 @@
 modules:
-  # Admin configuration panel
+  # Admin configuration panel - UI Kit React
   jira:adminPage:
     - key: pit-stop-admin
-      function: admin-ui
+      resource: admin-ui-resource
+      resolver:
+        function: admin-ui-resolver
       title: Pit Stop Configuration
 
   # Existing triggers
@@ -26,8 +28,13 @@ modules:
       handler: scanner.scanForStalledIssues
       timeoutSeconds: 300
 
-    - key: admin-ui
-      handler: adminUI.run
+    - key: admin-ui-resolver
+      handler: adminResolver.handler
+
+# Resources - UI Kit React
+resources:
+  - key: admin-ui-resource
+    path: /src/frontend
 
 app:
   id: ari:cloud:ecosystem::app/af96b1ef-efea-4eb7-b1f2-6fa71d8b810e
