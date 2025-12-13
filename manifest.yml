@@ -34,7 +34,7 @@ modules:
 # Resources - UI Kit React
 resources:
   - key: admin-ui-resource
-    path: /src/frontend
+    path: src/frontend
 
 app:
   id: ari:cloud:ecosystem::app/af96b1ef-efea-4eb7-b1f2-6fa71d8b810e
