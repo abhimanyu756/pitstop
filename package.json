@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@forge/api": "^3.0.0",
-    "@forge/react": "^11.8.2",
-    "@forge/resolver": "^1.5.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "@forge/bridge": "^2.6.0",
+    "@forge/resolver": "^1.5.11",
+    "@forge/react": "^11.2.6",
+    "react": "^18.2.0"
   },
   "devDependencies": {
     "@babel/preset-react": "^7.28.5",
     "eslint": "^8.0.0",
-    "eslint-plugin-react-hooks": "^4.0.0"
+    "eslint-plugin-react-hooks": "^4.2.0"
   }
 }

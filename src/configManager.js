@@ -1,21 +1,16 @@
-/**
- * Feature 2.3: Configurable Thresholds - Storage Manager
- * Manages threshold configuration using Forge Storage
- */
-
 import { storage } from "@forge/api";
 
 // Default thresholds (fallback if no custom config)
 const DEFAULT_THRESHOLDS = {
-  "In Progress": 48, // 2 days
-  "In Review": 24, // 1 day
-  "Code Review": 24, // 1 day
-  "To Do": 168, // 1 week
-  Backlog: 336, // 2 weeks
-  Blocked: 12, // 12 hours
-  Testing: 48, // 2 days
-  QA: 48, // 2 days
-  default: 72, // 3 days
+  "In Progress": 48,
+  "In Review": 24,
+  "Code Review": 24,
+  "To Do": 168,
+  Backlog: 336,
+  Blocked: 12,
+  Testing: 48,
+  QA: 48,
+  default: 72,
 };
 
 const CONFIG_KEY = "pit-stop-config";
@@ -26,18 +21,24 @@ const SETTINGS_KEY = "general-settings";
  * Get all threshold configurations
  */
 export async function getThresholds() {
+  console.log("📖 [configManager] getThresholds called");
+
   try {
     const config = await storage.get(CONFIG_KEY);
+    console.log("  - Raw storage data:", JSON.stringify(config, null, 2));
 
     if (!config || !config[THRESHOLDS_KEY]) {
-      console.log("No custom thresholds found, using defaults");
+      console.log("  - No custom thresholds, using defaults");
       return DEFAULT_THRESHOLDS;
     }
 
-    console.log("Loaded custom thresholds from storage");
+    console.log(
+      "  - Loaded custom thresholds:",
+      JSON.stringify(config[THRESHOLDS_KEY], null, 2)
+    );
     return config[THRESHOLDS_KEY];
   } catch (error) {
-    console.error("Error loading thresholds:", error.message);
+    console.error("❌ [configManager] getThresholds error:", error);
     return DEFAULT_THRESHOLDS;
   }
 }
@@ -54,15 +55,28 @@ export async function getThresholdForStatus(status) {
  * Set thresholds for multiple statuses
  */
 export async function setThresholds(thresholds) {
+  console.log("💾 [configManager] setThresholds called");
+  console.log("  - New thresholds:", JSON.stringify(thresholds, null, 2));
+
   try {
     const config = (await storage.get(CONFIG_KEY)) || {};
-    config[THRESHOLDS_KEY] = thresholds;
-    await storage.set(CONFIG_KEY, config);
+    console.log("  - Existing config:", JSON.stringify(config, null, 2));
 
-    console.log("✅ Thresholds saved to storage");
+    config[THRESHOLDS_KEY] = thresholds;
+
+    await storage.set(CONFIG_KEY, config);
+    console.log("  - Saved to storage successfully");
+
+    // Verify save
+    const verify = await storage.get(CONFIG_KEY);
+    console.log(
+      "  - Verification read:",
+      JSON.stringify(verify[THRESHOLDS_KEY], null, 2)
+    );
+
     return { success: true, thresholds };
   } catch (error) {
-    console.error("Error saving thresholds:", error.message);
+    console.error("❌ [configManager] setThresholds error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -76,7 +90,7 @@ export async function setThresholdForStatus(status, hours) {
     thresholds[status] = hours;
     return await setThresholds(thresholds);
   } catch (error) {
-    console.error("Error setting threshold:", error.message);
+    console.error("❌ [configManager] setThresholdForStatus error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -85,15 +99,17 @@ export async function setThresholdForStatus(status, hours) {
  * Reset all thresholds to defaults
  */
 export async function resetThresholds() {
+  console.log("🔄 [configManager] resetThresholds called");
+
   try {
     const config = (await storage.get(CONFIG_KEY)) || {};
     config[THRESHOLDS_KEY] = { ...DEFAULT_THRESHOLDS };
     await storage.set(CONFIG_KEY, config);
 
-    console.log("✅ Thresholds reset to defaults");
+    console.log("✅ [configManager] Thresholds reset to defaults");
     return { success: true, thresholds: DEFAULT_THRESHOLDS };
   } catch (error) {
-    console.error("Error resetting thresholds:", error.message);
+    console.error("❌ [configManager] resetThresholds error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -102,16 +118,24 @@ export async function resetThresholds() {
  * Get general settings
  */
 export async function getSettings() {
+  console.log("📖 [configManager] getSettings called");
+
   try {
     const config = await storage.get(CONFIG_KEY);
+    console.log("  - Raw storage data:", JSON.stringify(config, null, 2));
 
     if (!config || !config[SETTINGS_KEY]) {
+      console.log("  - No custom settings, using defaults");
       return getDefaultSettings();
     }
 
+    console.log(
+      "  - Loaded custom settings:",
+      JSON.stringify(config[SETTINGS_KEY], null, 2)
+    );
     return config[SETTINGS_KEY];
   } catch (error) {
-    console.error("Error loading settings:", error.message);
+    console.error("❌ [configManager] getSettings error:", error);
     return getDefaultSettings();
   }
 }
@@ -120,15 +144,28 @@ export async function getSettings() {
  * Save general settings
  */
 export async function setSettings(settings) {
+  console.log("💾 [configManager] setSettings called");
+  console.log("  - New settings:", JSON.stringify(settings, null, 2));
+
   try {
     const config = (await storage.get(CONFIG_KEY)) || {};
-    config[SETTINGS_KEY] = settings;
-    await storage.set(CONFIG_KEY, config);
+    console.log("  - Existing config:", JSON.stringify(config, null, 2));
 
-    console.log("✅ Settings saved to storage");
+    config[SETTINGS_KEY] = settings;
+
+    await storage.set(CONFIG_KEY, config);
+    console.log("  - Saved to storage successfully");
+
+    // Verify save
+    const verify = await storage.get(CONFIG_KEY);
+    console.log(
+      "  - Verification read:",
+      JSON.stringify(verify[SETTINGS_KEY], null, 2)
+    );
+
     return { success: true, settings };
   } catch (error) {
-    console.error("Error saving settings:", error.message);
+    console.error("❌ [configManager] setSettings error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -138,7 +175,7 @@ export async function setSettings(settings) {
  */
 function getDefaultSettings() {
   return {
-    noHumanCommentThreshold: 96, // 4 days
+    noHumanCommentThreshold: 96,
     commentCooldownHours: 24,
     maxIssuesPerRun: 50,
     features: {
@@ -178,7 +215,7 @@ export async function exportConfig() {
       }
     );
   } catch (error) {
-    console.error("Error exporting config:", error.message);
+    console.error("❌ [configManager] exportConfig error:", error);
     return null;
   }
 }
@@ -189,10 +226,10 @@ export async function exportConfig() {
 export async function importConfig(configJson) {
   try {
     await storage.set(CONFIG_KEY, configJson);
-    console.log("✅ Configuration imported successfully");
+    console.log("✅ [configManager] Configuration imported successfully");
     return { success: true };
   } catch (error) {
-    console.error("Error importing config:", error.message);
+    console.error("❌ [configManager] importConfig error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -201,8 +238,6 @@ export async function importConfig(configJson) {
  * Get all available statuses from Jira project
  */
 export async function getAvailableStatuses(projectKey) {
-  // This would need to fetch from Jira API
-  // For now, return common statuses
   return [
     "To Do",
     "In Progress",

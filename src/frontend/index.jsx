@@ -14,8 +14,8 @@ import ForgeReconciler, {
   Heading,
   Text,
   useForm,
-  invoke,
 } from "@forge/react";
+import { invoke } from "@forge/bridge";
 
 const App = () => {
   const [loading, setLoading] = useState(true);
@@ -38,6 +38,12 @@ const App = () => {
   useEffect(() => {
     console.log("Loading configuration...");
     loadConfig();
+
+    // 🐛 DEBUG: Expose invoke to window for console testing
+    window.testInvoke = invoke;
+    console.log(
+      "✅ Debug helper loaded: Use window.testInvoke('functionName', payload) to test"
+    );
   }, []);
 
   const loadConfig = async () => {
@@ -361,4 +367,8 @@ const App = () => {
   );
 };
 
-ForgeReconciler.render(<App />);
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
