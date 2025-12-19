@@ -1,3 +1,4 @@
+// src/adminResolver.js
 import Resolver from "@forge/resolver";
 import {
   getThresholds,
@@ -6,6 +7,7 @@ import {
   getSettings,
   setSettings,
 } from "./configManager";
+import { getDashboardMetrics } from "./dashboardMetrics";
 
 const resolver = new Resolver();
 
@@ -24,6 +26,25 @@ resolver.define("getConfig", async () => {
     return { thresholds, settings };
   } catch (error) {
     console.error("❌ [adminResolver] getConfig error:", error);
+    throw error;
+  }
+});
+
+// Get dashboard metrics
+resolver.define("getDashboard", async () => {
+  console.log("📊 [adminResolver] getDashboard called");
+
+  try {
+    const metrics = await getDashboardMetrics();
+
+    console.log("✅ [adminResolver] getDashboard success");
+    console.log(`  - Total issues: ${metrics.totalIssues}`);
+    console.log(`  - Stalled: ${metrics.stalledIssues}`);
+    console.log(`  - Healthy: ${metrics.healthyIssues}`);
+
+    return metrics;
+  } catch (error) {
+    console.error("❌ [adminResolver] getDashboard error:", error);
     throw error;
   }
 });
