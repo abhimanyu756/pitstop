@@ -190,6 +190,16 @@ function getDefaultSettings() {
       useChangelogAnalysis: true,
       useContextualSuggestions: true,
     },
+    // 🆕 AUTO-ACTIONS SETTINGS
+    autoActions: {
+      enabled: false, // Disabled by default - user must enable
+      autoPingAssignee: true,
+      autoPingThresholdHours: 72, // 3 days
+      autoAddStalledLabel: true,
+      autoReassignInactive: false, // Conservative - requires manual enable
+      autoMoveStatus: false, // Conservative - requires manual enable
+      autoEscalateCritical: false, // Conservative - requires manual enable
+    },
     activeStatuses: [
       "In Progress",
       "In Review",

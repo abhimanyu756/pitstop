@@ -146,6 +146,8 @@ const App = () => {
     }
   };
 
+  // Replace the onSaveSettings function in src/frontend/index.jsx
+
   const onSaveSettings = async (data) => {
     console.log("Saving settings:", data);
     setAlert({ type: "info", message: "Saving settings..." });
@@ -164,6 +166,16 @@ const App = () => {
         postEncouragement: data.postEncouragement === "true",
         useChangelogAnalysis: data.useChangelogAnalysis === "true",
         useContextualSuggestions: data.useContextualSuggestions === "true",
+      },
+      // 🆕 AUTO-ACTIONS SETTINGS
+      autoActions: {
+        enabled: data.autoActionsEnabled === "true",
+        autoPingAssignee: data.autoPingAssignee === "true",
+        autoPingThresholdHours: parseInt(data.autoPingThresholdHours) || 72,
+        autoAddStalledLabel: data.autoAddStalledLabel === "true",
+        autoReassignInactive: data.autoReassignInactive === "true",
+        autoMoveStatus: data.autoMoveStatus === "true",
+        autoEscalateCritical: data.autoEscalateCritical === "true",
       },
     };
 
@@ -314,34 +326,45 @@ const App = () => {
 
                 {/* By Status */}
                 <Box padding="space.300">
-                  <Heading size="small">📊 Stalled by Status</Heading>
+                  <Heading size="small">📊 By Status</Heading>
                   <Stack space="space.100">
-                    {Object.entries(dashboardMetrics.byStatus)
-                      .filter(([_, data]) => data.stalled > 0)
-                      .sort((a, b) => b[1].stalled - a[1].stalled)
-                      .map(([status, data]) => (
-                        <Text key={status}>
-                          {status}: {data.stalled} stalled / {data.total} total
-                          ({Math.round((data.stalled / data.total) * 100)}%)
-                        </Text>
-                      ))}
+                    {Object.entries(dashboardMetrics.byStatus).length > 0 ? (
+                      Object.entries(dashboardMetrics.byStatus)
+                        .sort((a, b) => b[1].total - a[1].total)
+                        .map(([status, data]) => (
+                          <Text key={status}>
+                            {status}: {data.stalled} stalled / {data.total}{" "}
+                            total
+                            {data.total > 0
+                              ? ` (${Math.round(
+                                  (data.stalled / data.total) * 100
+                                )}%)`
+                              : ""}
+                          </Text>
+                        ))
+                    ) : (
+                      <Text>No issues found</Text>
+                    )}
                   </Stack>
                 </Box>
 
                 {/* By Assignee */}
                 <Box padding="space.300">
-                  <Heading size="small">👥 Stalled by Assignee</Heading>
+                  <Heading size="small">👥 By Assignee</Heading>
                   <Stack space="space.100">
-                    {Object.entries(dashboardMetrics.byAssignee)
-                      .filter(([_, data]) => data.stalled > 0)
-                      .sort((a, b) => b[1].stalled - a[1].stalled)
-                      .slice(0, 10)
-                      .map(([assignee, data]) => (
-                        <Text key={assignee}>
-                          {assignee}: {data.stalled} stalled / {data.total}{" "}
-                          total
-                        </Text>
-                      ))}
+                    {Object.entries(dashboardMetrics.byAssignee).length > 0 ? (
+                      Object.entries(dashboardMetrics.byAssignee)
+                        .sort((a, b) => b[1].total - a[1].total)
+                        .slice(0, 10)
+                        .map(([assignee, data]) => (
+                          <Text key={assignee}>
+                            {assignee}: {data.stalled} stalled / {data.total}{" "}
+                            total
+                          </Text>
+                        ))
+                    ) : (
+                      <Text>No assignees found</Text>
+                    )}
                   </Stack>
                 </Box>
 
@@ -349,13 +372,19 @@ const App = () => {
                 <Box padding="space.300">
                   <Heading size="small">🔍 Common Stall Reasons</Heading>
                   <Stack space="space.100">
-                    {Object.entries(dashboardMetrics.stallReasons)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([reason, count]) => (
-                        <Text key={reason}>
-                          {reason.replace(/_/g, " ")}: {count} issues
-                        </Text>
-                      ))}
+                    {Object.keys(dashboardMetrics.stallReasons).length > 0 ? (
+                      Object.entries(dashboardMetrics.stallReasons)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([reason, count]) => (
+                          <Text key={reason}>
+                            {reason.replace(/_/g, " ")}: {count} issues
+                          </Text>
+                        ))
+                    ) : (
+                      <Text>
+                        No stall patterns detected - all issues are healthy! ✅
+                      </Text>
+                    )}
                   </Stack>
                 </Box>
 
@@ -572,6 +601,118 @@ const App = () => {
                         }
                         value="true"
                       />
+
+                      <Box>
+                        <Label>🤖 Auto-Actions (Experimental)</Label>
+                        <SectionMessage appearance="warning">
+                          <Text>
+                            Auto-actions will automatically fix common stall
+                            causes. Enable with caution.
+                          </Text>
+                        </SectionMessage>
+                        <Stack space="space.100">
+                          <Checkbox
+                            {...registerSetting("autoActionsEnabled")}
+                            label="Enable Auto-Actions"
+                            defaultChecked={
+                              settings.autoActions?.enabled === true
+                            }
+                            value="true"
+                          />
+
+                          <Box paddingLeft="space.300">
+                            <Stack space="space.100">
+                              <Checkbox
+                                {...registerSetting("autoPingAssignee")}
+                                label="Auto-ping assignee (when no activity)"
+                                defaultChecked={
+                                  settings.autoActions?.autoPingAssignee !==
+                                  false
+                                }
+                                value="true"
+                                isDisabled={
+                                  settings.autoActions?.enabled !== true
+                                }
+                              />
+
+                              <Checkbox
+                                {...registerSetting("autoAddStalledLabel")}
+                                label="Auto-add 'stalled' labels"
+                                defaultChecked={
+                                  settings.autoActions?.autoAddStalledLabel !==
+                                  false
+                                }
+                                value="true"
+                                isDisabled={
+                                  settings.autoActions?.enabled !== true
+                                }
+                              />
+
+                              <Checkbox
+                                {...registerSetting("autoReassignInactive")}
+                                label="Auto-reassign if assignee is inactive/on vacation"
+                                defaultChecked={
+                                  settings.autoActions?.autoReassignInactive ===
+                                  true
+                                }
+                                value="true"
+                                isDisabled={
+                                  settings.autoActions?.enabled !== true
+                                }
+                              />
+
+                              <Checkbox
+                                {...registerSetting("autoMoveStatus")}
+                                label="Auto-move status based on context"
+                                defaultChecked={
+                                  settings.autoActions?.autoMoveStatus === true
+                                }
+                                value="true"
+                                isDisabled={
+                                  settings.autoActions?.enabled !== true
+                                }
+                              />
+
+                              <Checkbox
+                                {...registerSetting("autoEscalateCritical")}
+                                label="Auto-escalate critical stalls"
+                                defaultChecked={
+                                  settings.autoActions?.autoEscalateCritical ===
+                                  true
+                                }
+                                value="true"
+                                isDisabled={
+                                  settings.autoActions?.enabled !== true
+                                }
+                              />
+                            </Stack>
+                          </Box>
+
+                          <Box paddingTop="space.200">
+                            <Label
+                              labelFor={getSettingFieldId(
+                                "autoPingThresholdHours"
+                              )}
+                            >
+                              Auto-Ping Threshold (hours)
+                            </Label>
+                            <Textfield
+                              {...registerSetting("autoPingThresholdHours")}
+                              type="number"
+                              defaultValue={String(
+                                settings.autoActions?.autoPingThresholdHours ||
+                                  72
+                              )}
+                              isDisabled={
+                                settings.autoActions?.enabled !== true
+                              }
+                            />
+                            <Text>
+                              Ping assignee if no activity for this many hours
+                            </Text>
+                          </Box>
+                        </Stack>
+                      </Box>
                     </Stack>
                   </Box>
                 </Stack>
@@ -593,6 +734,9 @@ const App = () => {
                 should have short thresholds{"\n"}• Review statuses need quick
                 attention{"\n"}• Enable Changelog Analysis for smarter detection
                 {"\n"}• Enable Contextual Suggestions for actionable advice
+                {"\n"}• 🆕 Start with auto-ping and auto-label, then enable
+                other auto-actions{"\n"}• 🆕 Auto-reassign and auto-move are
+                powerful but may surprise users
               </Text>
             </SectionMessage>
           </Box>

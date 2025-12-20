@@ -1,5 +1,7 @@
 import api, { route } from "@forge/api";
 import { isStalled, formatStallMessage } from "./telemetry.js";
+import { executeAutoActions, formatAutoActionsMessage } from "./autoActions.js";
+import { getSettings } from "./configManager.js";
 import { ACTIVE_STATUSES, MAX_ISSUES_PER_RUN } from "./config.js";
 
 /**
@@ -10,9 +12,11 @@ export async function scanForStalledIssues(event, context) {
   console.log("Timestamp:", new Date().toISOString());
 
   try {
+    const settings = await getSettings();
     const stalledIssues = [];
     const scannedIssues = [];
     const errors = [];
+    const autoActionsLog = [];
 
     // Fetch issues in active statuses
     console.log("Fetching issues in active statuses...");
@@ -46,14 +50,45 @@ export async function scanForStalledIssues(event, context) {
             reasons: stallInfo.reasons,
           });
 
-          // Check if we already commented recently
-          const shouldComment = await shouldPostComment(issue.id, issue.key);
+          // 🆕 EXECUTE AUTO-ACTIONS
+          let autoActionsResult = { actionsEnabled: false, actions: [] };
+          if (settings.autoActions?.enabled) {
+            console.log(`🤖 Executing auto-actions for ${issue.key}`);
+            autoActionsResult = await executeAutoActions(
+              fullIssue,
+              stallInfo,
+              settings
+            );
 
-          if (shouldComment) {
-            // Post stall warning
-            const message = formatStallMessage(stallInfo, issue.key);
+            if (autoActionsResult.actions.length > 0) {
+              autoActionsLog.push({
+                issue: issue.key,
+                actions: autoActionsResult.actions,
+              });
+            }
+          }
+
+          // Check if we should comment (or if auto-actions already handled it)
+          const shouldComment = await shouldPostComment(issue.id, issue.key);
+          const autoPinged = autoActionsResult.actions.some(
+            (a) => a.type === "AUTO_PING_ASSIGNEE"
+          );
+
+          if (shouldComment && !autoPinged && settings.features.postComments) {
+            // Post stall warning with auto-actions summary
+            let message = formatStallMessage(stallInfo, issue.key);
+
+            // Append auto-actions summary if any were taken
+            if (autoActionsResult.actions.length > 0) {
+              message += formatAutoActionsMessage(autoActionsResult);
+            }
+
             await addComment(issue.id, message);
             console.log(`✅ Posted stall warning to ${issue.key}`);
+          } else if (autoPinged) {
+            console.log(
+              `⏭️ Skipping comment for ${issue.key} - auto-ping already sent`
+            );
           } else {
             console.log(
               `⏭️ Skipping ${issue.key} - already commented recently`
@@ -75,12 +110,23 @@ export async function scanForStalledIssues(event, context) {
     console.log("\n=== SCAN COMPLETE ===");
     console.log(`Scanned: ${scannedIssues.length} issues`);
     console.log(`Stalled: ${stalledIssues.length} issues`);
+    console.log(`Auto-actions executed: ${autoActionsLog.length} issues`);
     console.log(`Errors: ${errors.length}`);
 
     if (stalledIssues.length > 0) {
       console.log("\nStalled Issues:");
       stalledIssues.forEach((item) => {
         console.log(`  - ${item.key} (${item.severity})`);
+      });
+    }
+
+    if (autoActionsLog.length > 0) {
+      console.log("\nAuto-Actions Taken:");
+      autoActionsLog.forEach((log) => {
+        console.log(`  - ${log.issue}: ${log.actions.length} actions`);
+        log.actions.forEach((action) => {
+          console.log(`    • ${action.type}: ${action.message}`);
+        });
       });
     }
 
@@ -97,6 +143,7 @@ export async function scanForStalledIssues(event, context) {
       success: true,
       scanned: scannedIssues.length,
       stalled: stalledIssues.length,
+      autoActions: autoActionsLog.length,
       errors: errors.length,
     };
   } catch (error) {
@@ -121,7 +168,6 @@ async function fetchActiveIssues() {
     console.log("JQL Query:", jql);
     console.log("Using POST method for search...");
 
-    // Use the NEW /search/jql endpoint (not /search)
     const response = await api
       .asApp()
       .requestJira(route`/rest/api/3/search/jql`, {
@@ -162,7 +208,7 @@ async function getIssueDetails(issueId) {
     const response = await api
       .asApp()
       .requestJira(
-        route`/rest/api/3/issue/${issueId}?fields=status,assignee,created,updated,comment,issuelinks,summary,description,priority`
+        route`/rest/api/3/issue/${issueId}?fields=status,assignee,created,updated,comment,issuelinks,summary,description,priority,reporter,labels`
       );
 
     if (!response.ok) {
@@ -179,18 +225,15 @@ async function getIssueDetails(issueId) {
 
 /**
  * Check if we should post a comment (avoid spamming)
- * Only comment if we haven't commented in the last 24 hours
  */
 async function shouldPostComment(issueId, issueKey) {
   try {
-    // Get app account ID
     const appAccountId = await getAppAccountId();
 
     if (!appAccountId) {
-      return true; // If we can't check, proceed anyway
+      return true;
     }
 
-    // Fetch recent comments
     const response = await api
       .asApp()
       .requestJira(
@@ -198,13 +241,12 @@ async function shouldPostComment(issueId, issueKey) {
       );
 
     if (!response.ok) {
-      return true; // If we can't check, proceed anyway
+      return true;
     }
 
     const data = await response.json();
     const comments = data.comments || [];
 
-    // Check if we commented recently (within last 24 hours)
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const recentBotComments = comments.filter((comment) => {
@@ -224,7 +266,7 @@ async function shouldPostComment(issueId, issueKey) {
     return true;
   } catch (error) {
     console.error("Error checking comments:", error.message);
-    return true; // If error, proceed with commenting
+    return true;
   }
 }
 
