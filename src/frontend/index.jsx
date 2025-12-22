@@ -146,7 +146,63 @@ const App = () => {
     }
   };
 
-  // Replace the onSaveSettings function in src/frontend/index.jsx
+  const [webhookTestResult, setWebhookTestResult] = useState(null);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+
+  const handleTestWebhook = async (platform) => {
+    setTestingWebhook(true);
+    setWebhookTestResult(null);
+
+    try {
+      const webhookUrl =
+        platform === "slack"
+          ? settings.integrations?.slackWebhook
+          : settings.integrations?.teamsWebhook;
+
+      if (!webhookUrl) {
+        setWebhookTestResult({
+          success: false,
+          message: `No ${platform} webhook URL configured`,
+        });
+        setTestingWebhook(false);
+        return;
+      }
+
+      const result = await invoke("testWebhook", {
+        webhookUrl,
+        platform,
+      });
+
+      setWebhookTestResult(result);
+      setTestingWebhook(false);
+
+      if (result.success) {
+        setAlert({
+          type: "success",
+          message: `✅ ${
+            platform === "slack" ? "Slack" : "Teams"
+          } webhook test successful!`,
+        });
+        setTimeout(() => setAlert(null), 3000);
+      } else {
+        setAlert({
+          type: "error",
+          message: `❌ Webhook test failed: ${result.error}`,
+        });
+      }
+    } catch (error) {
+      console.error("Webhook test error:", error);
+      setWebhookTestResult({
+        success: false,
+        message: error.message,
+      });
+      setTestingWebhook(false);
+      setAlert({
+        type: "error",
+        message: `Webhook test failed: ${error.message}`,
+      });
+    }
+  };
 
   const onSaveSettings = async (data) => {
     console.log("Saving settings:", data);
@@ -167,7 +223,6 @@ const App = () => {
         useChangelogAnalysis: data.useChangelogAnalysis === "true",
         useContextualSuggestions: data.useContextualSuggestions === "true",
       },
-      // 🆕 AUTO-ACTIONS SETTINGS
       autoActions: {
         enabled: data.autoActionsEnabled === "true",
         autoPingAssignee: data.autoPingAssignee === "true",
@@ -176,6 +231,16 @@ const App = () => {
         autoReassignInactive: data.autoReassignInactive === "true",
         autoMoveStatus: data.autoMoveStatus === "true",
         autoEscalateCritical: data.autoEscalateCritical === "true",
+      },
+      // 🆕 INTEGRATIONS SETTINGS
+      integrations: {
+        enabled: data.integrationsEnabled === "true",
+        jiraBaseUrl: data.jiraBaseUrl || "",
+        slackWebhook: data.slackWebhook || "",
+        teamsWebhook: data.teamsWebhook || "",
+        sendDailyDigest: data.sendDailyDigest === "true",
+        sendCriticalAlerts: data.sendCriticalAlerts === "true",
+        digestTime: data.digestTime || "09:00",
       },
     };
 
@@ -250,6 +315,7 @@ const App = () => {
           <Tab>📊 Dashboard</Tab>
           <Tab>⏱️ Thresholds</Tab>
           <Tab>⚙️ Settings</Tab>
+          <Tab>🔗 Integrations</Tab>
         </TabList>
 
         {/* Dashboard Tab */}
@@ -737,6 +803,207 @@ const App = () => {
                 {"\n"}• 🆕 Start with auto-ping and auto-label, then enable
                 other auto-actions{"\n"}• 🆕 Auto-reassign and auto-move are
                 powerful but may surprise users
+              </Text>
+            </SectionMessage>
+          </Box>
+        </TabPanel>
+
+        <TabPanel>
+          <Box padding="space.300">
+            <Form onSubmit={handleSettingsSubmit(onSaveSettings)}>
+              <FormHeader title="📢 Slack/Teams Integration">
+                Send notifications to your team channels
+              </FormHeader>
+              <FormSection>
+                <Stack space="space.300">
+                  {/* Enable Integrations */}
+                  <Box>
+                    <Checkbox
+                      {...registerSetting("integrationsEnabled")}
+                      label="Enable Slack/Teams Integration"
+                      defaultChecked={settings.integrations?.enabled === true}
+                      value="true"
+                    />
+                    <Text>
+                      Send stall notifications to Slack or Microsoft Teams
+                    </Text>
+                  </Box>
+
+                  <Box>
+                    <Label labelFor={getSettingFieldId("jiraBaseUrl")}>
+                      Jira Base URL
+                    </Label>
+                    <Textfield
+                      {...registerSetting("jiraBaseUrl")}
+                      type="text"
+                      placeholder="https://your-domain.atlassian.net"
+                      defaultValue={settings.integrations?.jiraBaseUrl || ""}
+                      isDisabled={!settings.integrations?.enabled}
+                    />
+                    <Text>Your Jira instance URL (for links in messages)</Text>
+                  </Box>
+
+                  {/* Slack Settings */}
+                  <Box>
+                    <Heading size="small">🟦 Slack Configuration</Heading>
+                    <Stack space="space.200">
+                      <Box>
+                        <Label labelFor={getSettingFieldId("slackWebhook")}>
+                          Slack Webhook URL
+                        </Label>
+                        <Textfield
+                          {...registerSetting("slackWebhook")}
+                          type="text"
+                          placeholder="https://hooks.slack.com/services/..."
+                          defaultValue={
+                            settings.integrations?.slackWebhook || ""
+                          }
+                          isDisabled={!settings.integrations?.enabled}
+                        />
+                        <Text>
+                          Get this from Slack: Workspace Settings → Apps →
+                          Incoming Webhooks
+                        </Text>
+                      </Box>
+
+                      <Button
+                        appearance="subtle"
+                        onClick={() => handleTestWebhook("slack")}
+                        isDisabled={
+                          !settings.integrations?.slackWebhook || testingWebhook
+                        }
+                      >
+                        {testingWebhook
+                          ? "Testing..."
+                          : "🧪 Test Slack Webhook"}
+                      </Button>
+                    </Stack>
+                  </Box>
+
+                  {/* Teams Settings */}
+                  <Box>
+                    <Heading size="small">
+                      🟪 Microsoft Teams Configuration
+                    </Heading>
+                    <Stack space="space.200">
+                      <Box>
+                        <Label labelFor={getSettingFieldId("teamsWebhook")}>
+                          Teams Webhook URL
+                        </Label>
+                        <Textfield
+                          {...registerSetting("teamsWebhook")}
+                          type="text"
+                          placeholder="https://outlook.office.com/webhook/..."
+                          defaultValue={
+                            settings.integrations?.teamsWebhook || ""
+                          }
+                          isDisabled={!settings.integrations?.enabled}
+                        />
+                        <Text>
+                          Get this from Teams: Channel → Connectors → Incoming
+                          Webhook
+                        </Text>
+                      </Box>
+
+                      <Button
+                        appearance="subtle"
+                        onClick={() => handleTestWebhook("teams")}
+                        isDisabled={
+                          !settings.integrations?.teamsWebhook || testingWebhook
+                        }
+                      >
+                        {testingWebhook
+                          ? "Testing..."
+                          : "🧪 Test Teams Webhook"}
+                      </Button>
+                    </Stack>
+                  </Box>
+
+                  {/* Notification Settings */}
+                  <Box>
+                    <Heading size="small">🔔 Notification Settings</Heading>
+                    <Stack space="space.200">
+                      <Checkbox
+                        {...registerSetting("sendDailyDigest")}
+                        label="Send Daily Digest"
+                        defaultChecked={
+                          settings.integrations?.sendDailyDigest !== false
+                        }
+                        value="true"
+                        isDisabled={!settings.integrations?.enabled}
+                      />
+                      <Text>
+                        Send a summary of all stalled issues once per day
+                      </Text>
+
+                      <Checkbox
+                        {...registerSetting("sendCriticalAlerts")}
+                        label="Send Critical Alerts"
+                        defaultChecked={
+                          settings.integrations?.sendCriticalAlerts !== false
+                        }
+                        value="true"
+                        isDisabled={!settings.integrations?.enabled}
+                      />
+                      <Text>
+                        Send instant notifications for critically stalled issues
+                      </Text>
+
+                      <Box>
+                        <Label labelFor={getSettingFieldId("digestTime")}>
+                          Daily Digest Time (HH:MM)
+                        </Label>
+                        <Textfield
+                          {...registerSetting("digestTime")}
+                          type="text"
+                          placeholder="09:00"
+                          defaultValue={
+                            settings.integrations?.digestTime || "09:00"
+                          }
+                          isDisabled={!settings.integrations?.enabled}
+                        />
+                        <Text>Time to send daily digest (24-hour format)</Text>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </FormSection>
+              <FormFooter>
+                <Button appearance="primary" type="submit">
+                  Save Integration Settings
+                </Button>
+              </FormFooter>
+            </Form>
+          </Box>
+
+          {/* Setup Guide */}
+          <Box padding="space.300">
+            <SectionMessage title="📚 Setup Guide" appearance="info">
+              <Text>
+                Slack Setup:
+                {"\n"}1. Go to https://api.slack.com/apps
+                {"\n"}2. Create New App → From scratch
+                {"\n"}3. Enable "Incoming Webhooks"
+                {"\n"}4. Add New Webhook to Workspace
+                {"\n"}5. Copy webhook URL and paste above
+                {"\n\n"}
+                Teams Setup:
+                {"\n"}1. Open your Teams channel
+                {"\n"}2. Click ••• → Connectors
+                {"\n"}3. Search "Incoming Webhook" → Configure
+                {"\n"}4. Name it "Pit Stop" and upload icon
+                {"\n"}5. Copy webhook URL and paste above
+                {"\n\n"}
+                📊 Daily Digest includes:
+                {"\n"}• Total stalled issues count
+                {"\n"}• Critical & high priority breakdown
+                {"\n"}• Direct links to issues
+                {"\n"}• Assignee information
+                {"\n\n"}
+                🚨 Critical Alerts sent for:
+                {"\n"}• Issues blocked by dependencies
+                {"\n"}• Unassigned issues in active status
+                {"\n"}• Issues stalled 2x longer than threshold
               </Text>
             </SectionMessage>
           </Box>

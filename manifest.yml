@@ -54,3 +54,8 @@ permissions:
     fetch:
       backend:
         - address: "*.atlassian.com"
+        # 🆕 Allow Slack webhooks
+        - address: "hooks.slack.com"
+        # 🆕 Allow Teams webhooks
+        - address: "*.office.com"
+        - address: "*.office365.com"

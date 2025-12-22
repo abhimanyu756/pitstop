@@ -1,6 +1,7 @@
 import api, { route } from "@forge/api";
 import { isStalled, formatStallMessage } from "./telemetry.js";
 import { executeAutoActions, formatAutoActionsMessage } from "./autoActions.js";
+import { sendCriticalAlert, sendDailyDigest } from "./slackIntegration.js";
 import { getSettings } from "./configManager.js";
 import { ACTIVE_STATUSES, MAX_ISSUES_PER_RUN } from "./config.js";
 
@@ -44,13 +45,27 @@ export async function scanForStalledIssues(event, context) {
 
         if (stallInfo.isStalled) {
           console.log(`⚠️ ${issue.key} is STALLED (${stallInfo.severity})`);
-          stalledIssues.push({
+
+          const stalledItem = {
             key: issue.key,
             severity: stallInfo.severity,
             reasons: stallInfo.reasons,
-          });
+            status: fullIssue.fields.status.name,
+            assignee: fullIssue.fields.assignee?.displayName || "Unassigned",
+          };
 
-          // 🆕 EXECUTE AUTO-ACTIONS
+          stalledIssues.push(stalledItem);
+
+          // 🆕 SEND INSTANT CRITICAL ALERTS
+          if (
+            stallInfo.severity === "CRITICAL" &&
+            settings.integrations?.sendCriticalAlerts
+          ) {
+            console.log(`🚨 Sending critical alert for ${issue.key}`);
+            await sendCriticalAlert(fullIssue, stallInfo, settings);
+          }
+
+          // EXECUTE AUTO-ACTIONS
           let autoActionsResult = { actionsEnabled: false, actions: [] };
           if (settings.autoActions?.enabled) {
             console.log(`🤖 Executing auto-actions for ${issue.key}`);
@@ -68,7 +83,7 @@ export async function scanForStalledIssues(event, context) {
             }
           }
 
-          // Check if we should comment (or if auto-actions already handled it)
+          // Check if we should comment
           const shouldComment = await shouldPostComment(issue.id, issue.key);
           const autoPinged = autoActionsResult.actions.some(
             (a) => a.type === "AUTO_PING_ASSIGNEE"
@@ -104,6 +119,16 @@ export async function scanForStalledIssues(event, context) {
         console.error(`Error processing ${issue.key}:`, error.message);
         errors.push({ issue: issue.key, error: error.message });
       }
+    }
+
+    // 🆕 SEND DAILY DIGEST
+    if (
+      settings.integrations?.enabled &&
+      settings.integrations?.sendDailyDigest
+    ) {
+      console.log("📊 Sending daily digest to Slack/Teams...");
+      const digestResult = await sendDailyDigest(stalledIssues, settings);
+      console.log(`Daily digest result:`, digestResult);
     }
 
     // Summary
@@ -161,12 +186,10 @@ export async function scanForStalledIssues(event, context) {
  */
 async function fetchActiveIssues() {
   try {
-    // Build JQL query for active statuses
     const statusFilter = ACTIVE_STATUSES.map((s) => `"${s}"`).join(",");
     const jql = `status in (${statusFilter}) ORDER BY updated ASC`;
 
     console.log("JQL Query:", jql);
-    console.log("Using POST method for search...");
 
     const response = await api
       .asApp()
@@ -195,14 +218,10 @@ async function fetchActiveIssues() {
     return data.issues || [];
   } catch (error) {
     console.error("Error fetching issues:", error.message);
-    console.error("Stack:", error.stack);
     return [];
   }
 }
 
-/**
- * Get full issue details
- */
 async function getIssueDetails(issueId) {
   try {
     const response = await api
@@ -223,9 +242,6 @@ async function getIssueDetails(issueId) {
   }
 }
 
-/**
- * Check if we should post a comment (avoid spamming)
- */
 async function shouldPostComment(issueId, issueKey) {
   try {
     const appAccountId = await getAppAccountId();
@@ -270,9 +286,6 @@ async function shouldPostComment(issueId, issueKey) {
   }
 }
 
-/**
- * Get app's account ID
- */
 async function getAppAccountId() {
   try {
     const response = await api.asApp().requestJira(route`/rest/api/3/myself`);
@@ -289,9 +302,6 @@ async function getAppAccountId() {
   }
 }
 
-/**
- * Add a comment to an issue
- */
 async function addComment(issueId, text) {
   const commentBody = {
     body: {
@@ -330,9 +340,6 @@ async function addComment(issueId, text) {
   return await response.json();
 }
 
-/**
- * Sleep utility
- */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -8,6 +8,7 @@ import {
   setSettings,
 } from "./configManager";
 import { getDashboardMetrics } from "./dashboardMetrics";
+import { testWebhook } from "./slackIntegration";
 
 const resolver = new Resolver();
 
@@ -19,9 +20,7 @@ resolver.define("getConfig", async () => {
     const thresholds = await getThresholds();
     const settings = await getSettings();
 
-    console.log("✅ [adminResolver] getConfig success:");
-    console.log("  - Thresholds:", JSON.stringify(thresholds, null, 2));
-    console.log("  - Settings:", JSON.stringify(settings, null, 2));
+    console.log("✅ [adminResolver] getConfig success");
 
     return { thresholds, settings };
   } catch (error) {
@@ -38,9 +37,6 @@ resolver.define("getDashboard", async () => {
     const metrics = await getDashboardMetrics();
 
     console.log("✅ [adminResolver] getDashboard success");
-    console.log(`  - Total issues: ${metrics.totalIssues}`);
-    console.log(`  - Stalled: ${metrics.stalledIssues}`);
-    console.log(`  - Healthy: ${metrics.healthyIssues}`);
 
     return metrics;
   } catch (error) {
@@ -52,15 +48,11 @@ resolver.define("getDashboard", async () => {
 // Save thresholds
 resolver.define("saveThresholds", async ({ payload }) => {
   console.log("💾 [adminResolver] saveThresholds called");
-  console.log("  - Payload:", JSON.stringify(payload, null, 2));
 
   try {
     const result = await setThresholds(payload.thresholds);
 
-    console.log(
-      "✅ [adminResolver] saveThresholds result:",
-      JSON.stringify(result, null, 2)
-    );
+    console.log("✅ [adminResolver] saveThresholds success");
 
     return result;
   } catch (error) {
@@ -76,10 +68,7 @@ resolver.define("resetThresholds", async () => {
   try {
     const result = await resetThresholds();
 
-    console.log(
-      "✅ [adminResolver] resetThresholds result:",
-      JSON.stringify(result, null, 2)
-    );
+    console.log("✅ [adminResolver] resetThresholds success");
 
     return result;
   } catch (error) {
@@ -91,19 +80,32 @@ resolver.define("resetThresholds", async () => {
 // Save general settings
 resolver.define("saveSettings", async ({ payload }) => {
   console.log("💾 [adminResolver] saveSettings called");
-  console.log("  - Payload:", JSON.stringify(payload, null, 2));
 
   try {
     const result = await setSettings(payload.settings);
 
-    console.log(
-      "✅ [adminResolver] saveSettings result:",
-      JSON.stringify(result, null, 2)
-    );
+    console.log("✅ [adminResolver] saveSettings success");
 
     return result;
   } catch (error) {
     console.error("❌ [adminResolver] saveSettings error:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 🆕 Test webhook connectivity
+resolver.define("testWebhook", async ({ payload }) => {
+  console.log("🧪 [adminResolver] testWebhook called");
+  console.log("  - Platform:", payload.platform);
+
+  try {
+    const result = await testWebhook(payload.webhookUrl, payload.platform);
+
+    console.log("✅ [adminResolver] testWebhook result:", result);
+
+    return result;
+  } catch (error) {
+    console.error("❌ [adminResolver] testWebhook error:", error);
     return { success: false, error: error.message };
   }
 });
